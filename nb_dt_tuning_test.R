@@ -1,7 +1,3 @@
-#Name:Mandeep Rana
-#IST 707
-#HW 6
-
 rm(list=ls()) 
 #install.packages("klaR")
 #install.packages("MASS")
