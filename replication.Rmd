@@ -3,9 +3,6 @@ title: "RandomForest,SVM,K-NN Comparison"
 author: "Mandeep Rana"
 date: "11/30/2018"
 output: word_document
-#Name:Mandeep Rana
-#IST 707
-#HW 7
 ---
 
 #By running these 3 models - KNN, SVM, Random Forest; we get Radial SVM as the best model having accuracy as ~97% compared to the others. Linear SVM accuracy is ~90% which means that the data is non-linear and rbf suits well with this data. However, KNN and Random Forest also performs well but Radial SVM is outstanding. Overall, SVM,KNN, and Random Forest models have good performance compared with Naive Bayes and decision trees from the previous assignment as we can compare these results. I also observed that it is easy and less time consuming to train random forest model compared to KNN and SVM. 
