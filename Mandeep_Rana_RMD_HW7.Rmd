@@ -1,0 +1,199 @@
+---
+title: "RandomForest,SVM,K-NN Comparison"
+author: "Mandeep Rana"
+date: "11/30/2018"
+output: word_document
+#Name:Mandeep Rana
+#IST 707
+#HW 7
+---
+
+#By running these 3 models - KNN, SVM, Random Forest; we get Radial SVM as the best model having accuracy as ~97% compared to the others. Linear SVM accuracy is ~90% which means that the data is non-linear and rbf suits well with this data. However, KNN and Random Forest also performs well but Radial SVM is outstanding. Overall, SVM,KNN, and Random Forest models have good performance compared with Naive Bayes and decision trees from the previous assignment as we can compare these results. I also observed that it is easy and less time consuming to train random forest model compared to KNN and SVM. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Reading train and test data files and loading all the required packages.
+
+```{r read, message=FALSE, warning=FALSE}
+rm(list=ls()) 
+#install.packages("klaR")
+#install.packages("MASS")
+#install.packages("ElemStatLearn")
+#install.packages("randomForest")
+#install.packages("class")
+library(klaR)
+library(MASS)
+library(caret)
+library(lattice)
+library(ggplot2)
+library(C50)
+library(rpart)
+library(arules)
+library(e1071)
+library(ElemStatLearn)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(class)
+setwd("/Users/manu/Desktop/Fall'18/IST 707/Wk8/")
+imgtrain = read.csv("all/train.csv", header = TRUE, stringsAsFactors = FALSE)
+imgtest = read.csv("all/test.csv", header = TRUE, stringsAsFactors = FALSE)
+
+```
+#Splitting train set into train and validation set so that we can evaluate model performance
+#And using the original test set fro Kaggle submission
+
+```{r split}
+
+train_valid <- createDataPartition(imgtrain$label, p = 0.8, list = FALSE)
+imgtrain_valid <- imgtrain[train_valid,]
+imgtest_valid <- imgtrain[-train_valid,]
+table(imgtrain_valid$label)
+table(imgtest_valid$label)
+
+```
+######### Random Forest ##############
+#Performing Random Forest Model Development to predict labels of original test set and of #validation set
+```{r rf}
+labels1 <- as.factor(imgtrain_valid$label)
+ptime <- proc.time()
+rf_valid <- randomForest(imgtrain_valid[,-1], labels1, imgtest_valid[,-1], ntree = 25)
+proc.time()-ptime
+#rf_valid
+actual.labels <- as.factor(imgtest_valid$label)
+
+
+```
+CHECKING MODEL PERFORMANCE - RANDOM FOREST
+```{r perf}
+confusionMatrix(actual.labels, rf_valid$test$predicted)
+```
+
+Predicting the labels/digits using the original test set
+
+```{r pred_RF}
+
+labels<-as.factor(imgtrain$label)
+ptime <- proc.time()
+rf <- randomForest(imgtrain[,-1], labels, imgtest, ntree = 25)
+proc.time()-ptime
+#rf
+
+```
+Creating Kaggle submission
+```{r submit_RF}
+pred.rf <- data.frame(ImageId= 1:nrow(imgtest), Label= rf$test$predicted)
+write.csv(pred.rf, "rf_submission.csv",row.names = FALSE)
+```
+
+############## KNN ##########
+Performing scaling, PCA and data preprocessing for KNN and SVM
+
+```{r knn}
+imgtrain_valid.x<- imgtrain_valid[,-1]/255
+imgtrain_valid.c<- scale(imgtrain_valid.x, center=TRUE, scale = FALSE)
+trainMeans<-colMeans(imgtrain_valid.x)
+trainMeansMatrix<-do.call("rbind",replicate(nrow(imgtest_valid),trainMeans,simplif=FALSE))
+```
+
+#generating covariance matrix
+```{r conv}
+imgtrain_valid.conv <- cov(imgtrain_valid.x)
+```
+#running pca
+```{r pca}
+imgtrain_valid.pca <- prcomp(imgtrain_valid.conv)
+varEx<-as.data.frame(imgtrain_valid.pca$sdev^2/sum(imgtrain_valid.pca$sdev^2))
+varEx<-cbind(c(1:784),cumsum(varEx[,1]))
+colnames(varEx)<-c("Nmbr PCs","Cum Var")
+VarianceExplanation<-varEx[seq(0,200,20),]
+```
+# Because we can capture 95+% of the variation in the training data
+# using only the first 20 PCs, we extract these for use in the KNN classifier
+```{r rotate}
+rotate<-imgtrain_valid.pca$rotation[,1:20]
+```
+# matrix with 784 cols and convert it to a matrix with only 20 cols
+```{r matrix}
+trainFinal<-as.matrix(imgtrain_valid.c)%*%(rotate)
+```
+# We then create a loading matrix for the testing data after applying the same centering and scaling convention as we did for training set
+```{r final}
+imgtest_valid.x<-imgtest_valid[,-1]/255
+testFinal<-as.matrix(imgtest_valid.x-trainMeansMatrix)%*%(rotate)
+
+```
+
+# Run the KNN predictor on the dim reduced datasets
+```{r KNN}
+
+predict<-knn(train=trainFinal,test=testFinal,cl=labels1,k=3)
+#predict
+```
+CHECKING MODEL PERFORMANCE - KNN
+```{r perf_Knn}
+
+confusionMatrix(actual.labels, predict)
+```
+
+# runnning on original test data for kaggle submission
+```{r submit_KNN}
+test.kaggle <- imgtest/255
+test.kaggle.final <- as.matrix(test.kaggle-trainMeansMatrix)%*%(rotate)
+pred.kaggle <- knn(train = trainFinal, test = test.kaggle.final, cl=labels1, k=3)
+pred.knn <- data.frame(ImageId= 1:nrow(test.kaggle.final), Label= pred.kaggle)
+write.csv(pred.knn, "knn_submission.csv",row.names = FALSE)
+
+```
+
+############ SVM #############
+#running linear svm model on preprocessed data - PCA
+```{r SVM}
+model.svm <- svm(labels1~., data=trainFinal, kernel="linear",cost=10)
+model.svm
+
+pred.svm <- predict(model.svm, testFinal)
+#pred.svm
+```
+CHECKING MODEL PERFORMANCE - LINEAR SVM
+```{r perf_Lsvm}
+confusionMatrix(actual.labels, pred.svm)
+```
+
+
+#running linear svm model on original test data for kaggle submission
+```{r submit_svm}
+pred.linear <- predict(model.svm, test.kaggle.final)
+#pred.linear
+pred.svm.linear <- data.frame(ImageId= 1:nrow(test.kaggle.final), Label= pred.linear)
+write.csv(pred.svm.linear, "l_svm_submission.csv", row.names = FALSE)
+```
+#running non-linear svm on preprocessed data - PCA
+```{r RSVM}
+
+model.svm.non <- svm(labels1~., data = trainFinal, kernel = "radial", cost =10)
+#model.svm.non
+
+pred.svm.non <- predict(model.svm.non, testFinal)
+#pred.svm.non
+```
+CHECKING MODEL PERFORMANCE - NON-LINEAR SVM
+```{r perf_Rsvm}
+confusionMatrix(actual.labels, pred.svm.non)
+```
+#running non-linear svm (radial) on original test data for kaggle submission
+```{r submit_Rsvm}
+
+pred.svm.non <- predict(model.svm.non, test.kaggle.final)
+#pred.svm.non
+pred.radial <- data.frame(ImageId= 1:nrow(test.kaggle.final), Label= pred.svm.non)
+write.csv(pred.radial, "R_svm_submission.csv", row.names = FALSE)
+```
+
+
+
+
+
+
